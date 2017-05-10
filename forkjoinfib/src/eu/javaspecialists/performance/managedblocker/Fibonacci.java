@@ -12,6 +12,8 @@ import java.util.concurrent.*;
 // test100_000_000() time = 23844
 // test100_000_000() time = 13513
 // test100_000_000() time = 11455
+// test100_000_000() time = 7516
+
 
 
 
@@ -23,9 +25,10 @@ public class Fibonacci {
         return f(n, cache);
     }
 
-    private BigInteger f(int n, Map<Integer, BigInteger> cache) {
-        BigInteger result = cache.get(n);
+    private final BigInteger RESERVED = BigInteger.valueOf(-1000);
 
+    private BigInteger f(int n, Map<Integer, BigInteger> cache) {
+        BigInteger result = cache.putIfAbsent(n, RESERVED);
         if (result == null) {
             int half = (n + 1) / 2;
 
@@ -45,12 +48,25 @@ public class Fibonacci {
                 } else {
                     result = f0.shiftLeft(1).add(f1).multiply(f1);
                 }
-                cache.put(n, result);
+                synchronized (RESERVED) {
+                    cache.put(n, result);
+                    RESERVED.notifyAll();
+                }
             } finally {
                 time = n > 10_000 ? System.currentTimeMillis() - time : 0;
                 if (time > 50) {
                     System.out.printf("f(%d) took %d%n", n, time);
                 }
+            }
+        } else if (result == RESERVED) {
+            try {
+                synchronized (RESERVED) {
+                    while((result = cache.get(n)) == RESERVED) {
+                        RESERVED.wait();
+                    }
+                }
+            } catch (InterruptedException e) {
+                throw new CancellationException("interrupted");
             }
         }
         return result;
